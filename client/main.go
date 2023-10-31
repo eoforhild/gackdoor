@@ -16,26 +16,20 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-func seal(msg []byte, info []byte, gcm cipher.AEAD, hmacKey []byte) []byte {
+func seal(msg []byte, info []byte, gcm cipher.AEAD) []byte {
 	nonce := make([]byte, gcm.NonceSize())
 	rand.Read(nonce)
-	hm := hmac.New(sha256.New, hmacKey)
-	hm.Write(info)
-	mac := hm.Sum(nil)
-	ct := gcm.Seal(nonce, nonce, msg, mac)
+	ct := gcm.Seal(nonce, nonce, msg, info)
 	return ct
 }
 
-func open(buf []byte, info []byte, gcm cipher.AEAD, hmacKey []byte) ([]byte, error) {
+func open(buf []byte, info []byte, gcm cipher.AEAD) ([]byte, error) {
 	nonce := buf[:gcm.NonceSize()]
 	ct := buf[gcm.NonceSize():]
-	hm := hmac.New(sha256.New, hmacKey)
-	hm.Write(info)
-	mac := hm.Sum(nil)
-	return gcm.Open(nil, nonce, ct, mac)
+	return gcm.Open(nil, nonce, ct, info)
 }
 
-func sendThread(conn net.Conn, gcm cipher.AEAD, hmacKey []byte) {
+func sendThread(conn net.Conn, gcm cipher.AEAD, info []byte) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		in, _ := reader.ReadString('\n')
@@ -43,7 +37,7 @@ func sendThread(conn net.Conn, gcm cipher.AEAD, hmacKey []byte) {
 	}
 }
 
-func recvThread(conn net.Conn, gcm cipher.AEAD, hmacKey []byte, wg *sync.WaitGroup) {
+func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup) {
 	buf := make([]byte, 1052)
 	for {
 		r, err := conn.Read(buf)
@@ -51,8 +45,7 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, hmacKey []byte, wg *sync.WaitGro
 			break
 		}
 		tempBuf := buf[:r]
-		info := []byte(conn.RemoteAddr().String() + conn.LocalAddr().String())
-		pt, err := open(tempBuf, info, gcm, hmacKey)
+		pt, err := open(tempBuf, info, gcm)
 		if err != nil {
 			fmt.Println("err")
 			break
@@ -65,12 +58,11 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, hmacKey []byte, wg *sync.WaitGro
 func main() {
 	// Begin connection
 	conn, _ := net.Dial("tcp", "localhost:3333")
+	defer conn.Close()
 
 	// Generate private and public keys
 	priv, _ := ecdh.Curve.GenerateKey(ecdh.X25519(), rand.Reader)
 	pub := priv.PublicKey()
-
-	defer conn.Close()
 
 	// Send the server our public key
 	conn.Write(pub.Bytes())
@@ -92,23 +84,32 @@ func main() {
 	c, _ := aes.NewCipher(gcmKey[:])
 	gcm, _ := cipher.NewGCM(c)
 
-	// Send the magic word, TODO. make it parameterizable
-	pt := []byte("foobar")
+	// Make an associated data with all of our sent packets
 	info := []byte(conn.RemoteAddr().String() + conn.LocalAddr().String())
-	ct := seal(pt, info, gcm, hmacKey[:])
+	hm := hmac.New(sha256.New, hmacKey[:])
+	hm.Write(info)
+	info = hm.Sum(nil)
+
+	// Send the password, TODO. make it parameterizable
+	pt := []byte("foobar")
+	ct := seal(pt, info, gcm)
 	conn.Write(ct)
 
 	// Read the ack from server
 	readLen, _ = conn.Read(buf)
-	if string(buf[:readLen]) != "ack" {
-		conn.Close()
+	tempBuf := buf[:readLen]
+	ack, err := open(tempBuf, info, gcm)
+	if err != nil {
+		fmt.Println("Failed to decrypt")
+	}
+	if string(ack) != "ack" {
 		return
 	}
 
 	// Start threads for handling connection
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go sendThread(conn, gcm, hmacKey[:])
-	go recvThread(conn, gcm, hmacKey[:], &wg)
+	go sendThread(conn, gcm, info[:])
+	go recvThread(conn, gcm, info[:], &wg)
 	wg.Wait()
 }
