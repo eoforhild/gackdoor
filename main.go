@@ -55,7 +55,7 @@ func sendThread(stdout io.ReadCloser, conn net.Conn, gcm cipher.AEAD, info []byt
 }
 
 func recvThread(stdin io.WriteCloser, conn net.Conn, gcm cipher.AEAD, info []byte) {
-	buf := make([]byte, 1024)
+	buf := make([]byte, 1052)
 	for {
 		r, err := conn.Read(buf)
 		// The connection has closed from the other end
@@ -63,7 +63,29 @@ func recvThread(stdin io.WriteCloser, conn net.Conn, gcm cipher.AEAD, info []byt
 			stdin.Write([]byte("exit\n"))
 			break
 		}
-		stdin.Write(buf[:r])
+		pt, err := open(buf[:r], info, gcm)
+		if err != nil {
+			stdin.Write([]byte("exit\n"))
+			break
+		}
+		stdin.Write(pt)
+		first := len(string(pt)) > 3 && string(pt[:3]) == "cd "
+		second := len(string(pt)) == 3 && string(pt[:2]) == "cd"
+		if first || second {
+			ct := seal([]byte(""), info, gcm)
+			if first {
+				// Check validity
+				path := string(pt[3 : len(pt)-1])
+				err := os.Chdir(path)
+				if err != nil {
+					continue
+				}
+			} else if second {
+				path, _ := os.UserHomeDir()
+				os.Chdir(path)
+			}
+			conn.Write(ct)
+		}
 	}
 }
 
@@ -169,14 +191,13 @@ func main() {
 	// Close listening socket at the end of application
 	fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
 	defer sock.Close()
-
 	for {
 		conn, err := sock.Accept()
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 			continue
 		}
-		// Handle connection in new goroutine
+		// Handle connection
 		go handleConnection(conn)
 	}
 }

