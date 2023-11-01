@@ -7,6 +7,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -19,6 +20,8 @@ import (
 
 	"golang.org/x/crypto/hkdf"
 )
+
+const PASSWORD = "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"
 
 const (
 	CONN_PORT    = "3333"
@@ -170,8 +173,11 @@ func handleConnection(conn net.Conn, local bool) {
 		fmt.Println("Decryption failed")
 		return
 	}
-	if string(pt) != "foobar" {
-		fmt.Println("Wrong magic word for protocol")
+	h := sha256.New()
+	h.Write(pt)
+	res := h.Sum(nil)
+	if hex.EncodeToString(res) != PASSWORD {
+		fmt.Println("Wrong password")
 		return
 	}
 
@@ -304,7 +310,7 @@ func main() {
 				continue
 			}
 
-			handleConnection(conn)
+			handleConnection(conn, *local)
 		}
 	}()
 
