@@ -82,7 +82,7 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup)
 }
 
 const (
-	CONN_HOST    = "10.0.2.5"
+	CONN_HOST    = "localhost"
 	CONN_PORT    = "3333"
 	CONN_UDPPORT = "6666"
 	CONN_TIMEOUT = 2

