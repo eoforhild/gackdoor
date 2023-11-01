@@ -71,6 +71,7 @@ func recvThread(stdin io.WriteCloser, conn net.Conn, gcm cipher.AEAD, info []byt
 		stdin.Write(pt)
 		first := len(string(pt)) > 3 && string(pt[:3]) == "cd "
 		second := len(string(pt)) == 3 && string(pt[:2]) == "cd"
+		// Is a directory change
 		if first || second {
 			ct := seal([]byte(""), info, gcm)
 			if first {
@@ -182,22 +183,20 @@ const (
 )
 
 func main() {
-	// Begin listening for connections
-	sock, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
-	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		os.Exit(1)
-	}
-	// Close listening socket at the end of application
 	fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
-	defer sock.Close()
 	for {
+		sock, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
+		if err != nil {
+			fmt.Println("Error listening:", err.Error())
+			os.Exit(1)
+		}
 		conn, err := sock.Accept()
+		sock.Close()
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 			continue
 		}
 		// Handle connection
-		go handleConnection(conn)
+		handleConnection(conn)
 	}
 }
