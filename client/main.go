@@ -89,6 +89,14 @@ const (
 )
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Needs 1 argument: the password")
+		os.Exit(1)
+	} else if len(os.Args) != 2 {
+		fmt.Println("Needs only 1 argument: the password")
+		os.Exit(1)
+	}
+
 	// Begin connection
 	udp, uerr := net.Dial("udp", CONN_HOST+":"+CONN_UDPPORT)
 	if uerr != nil {
@@ -99,7 +107,6 @@ func main() {
 	udp.Close()
 	var conn net.Conn
 	var err error
-
 	// Retry every 250ms for 2s
 	for i := 0; i < 8; i++ {
 		conn, err = net.Dial("tcp", CONN_HOST+":"+CONN_PORT)
@@ -146,7 +153,7 @@ func main() {
 	info = hm.Sum(nil)
 
 	// Send the password, TODO. make it parameterizable
-	pt := []byte("foobar")
+	pt := []byte(os.Args[1])
 	ct := seal(pt, info, gcm)
 	conn.Write(ct)
 

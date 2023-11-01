@@ -156,8 +156,9 @@ func handleConnection(conn net.Conn) {
 		fmt.Println("Decryption failed")
 		return
 	}
+	// Need to be able to check against a hashed version perhaps
 	if string(pt) != "foobar" {
-		fmt.Println("Wrong magic word for protocol")
+		fmt.Println("Wrong password")
 		return
 	}
 
