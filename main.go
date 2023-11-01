@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"time"
 
 	"golang.org/x/crypto/hkdf"
 )
@@ -184,19 +185,48 @@ const (
 
 func main() {
 	fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
+	tcpAddr, _ := net.ResolveTCPAddr(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
+	connAttempt := make(chan bool)
+	connReady := make(chan bool)
+	go func() {
+		for {
+			connReady <- true
+			<-connAttempt
+			sock, err := net.ListenTCP(CONN_TYPE, tcpAddr)
+			if err != nil {
+				fmt.Println("Error listening:", err.Error())
+				os.Exit(1)
+			}
+			sock.SetDeadline(time.Now().Add(2 * time.Second))
+			conn, err := sock.Accept()
+			sock.Close()
+			if err != nil {
+				fmt.Println("Error accepting: ", err.Error())
+				continue
+			}
+
+			// Handle connection
+			handleConnection(conn)
+		}
+	}()
+	// This part below silently listens for the magic word
+	// to open up the tcp port
+	udpAddr, _ := net.ResolveUDPAddr("udp", CONN_HOST+":"+"6666")
+	buf := make([]byte, 1024)
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		fmt.Println("Error listening:", err.Error())
+		os.Exit(1)
+	}
 	for {
-		sock, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
-		if err != nil {
-			fmt.Println("Error listening:", err.Error())
-			os.Exit(1)
+		<-connReady
+		for {
+			r, _ := conn.Read(buf)
+			msg := string(buf[:r])
+			if msg == "!@fizzbuzz@!" {
+				break
+			}
 		}
-		conn, err := sock.Accept()
-		sock.Close()
-		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
-			continue
-		}
-		// Handle connection
-		handleConnection(conn)
+		connAttempt <- true
 	}
 }
