@@ -15,6 +15,6 @@ CGO_ENABLED=0 go build
 rm encGack
 mv stub ../gackdoor
 
-cd client
+cd ../client
 go build
 mv client ../client
