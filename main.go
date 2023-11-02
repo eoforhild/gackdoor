@@ -22,6 +22,7 @@ import (
 )
 
 const PASSWORD = "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"
+const UDPMAGIC = "!@fizzbuzz@!"
 
 const (
 	CONN_PORT        = "3333"
@@ -341,7 +342,7 @@ func main() {
 		for {
 			r, _ := conn.Read(buf)
 			msg := string(buf[:r])
-			if msg == "!@fizzbuzz@!" {
+			if msg == UDPMAGIC {
 				fmt.Println("Received a connection request, opening TCP port...")
 				break
 			}

