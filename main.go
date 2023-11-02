@@ -230,19 +230,29 @@ func openTCPRules(local bool) {
 
 func deleteUDPRules(local bool) {
 	if !local {
-		closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-		closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
-		closeInPort.Run()
-		closeOutPort.Run()
+		for {
+			closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+			closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "udp", "-m", "udp", "--dport", CONN_UDPPORT, "-j", "ACCEPT")
+			err1 := closeInPort.Run()
+			err2 := closeOutPort.Run()
+			if err1 != nil && err2 != nil {
+				break
+			}
+		}
 	}
 }
 
 func deleteTCPRules(local bool) {
 	if !local {
-		closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-		closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
-		closeInPort.Run()
-		closeOutPort.Run()
+		for {
+			closeInPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "INPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+			closeOutPort := exec.Command("sudo", "strace", "-o", "/dev/null", "iptables", "-D", "OUTPUT", "-p", "tcp", "-m", "tcp", "--dport", CONN_PORT, "-j", "ACCEPT")
+			err1 := closeInPort.Run()
+			err2 := closeOutPort.Run()
+			if err1 != nil && err2 != nil {
+				break
+			}
+		}
 	}
 }
 
