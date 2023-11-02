@@ -17,4 +17,4 @@ mv stub ../gackdoor
 
 cd ../client
 go build
-mv client ../client
+mv client ../gack_client
