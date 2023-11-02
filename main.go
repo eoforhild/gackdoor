@@ -24,11 +24,11 @@ import (
 const PASSWORD = "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"
 
 const (
-	CONN_PORT    = "3333"
-	CONN_UDPPORT = "6666"
-	CONN_TYPE    = "tcp"
-	CONN_TIMEOUT = 2
-	PORT_TIMEOUT = 3
+	CONN_PORT        = "3333"
+	CONN_UDPPORT     = "6666"
+	CONN_TYPE        = "tcp"
+	CONN_TIMEOUT     = 2
+	PROTOCOL_TIMEOUT = 3
 )
 
 func seal(msg []byte, info []byte, gcm cipher.AEAD) []byte {
@@ -120,7 +120,7 @@ func handleConnection(conn net.Conn, local bool) {
 	// First packet sent by client is supposed to be a public key
 	// of length 32, and is also supposed to be on the curve
 	buf := make([]byte, 1024)
-	conn.SetDeadline(time.Now().Add(PORT_TIMEOUT * time.Second))
+	conn.SetDeadline(time.Now().Add(PROTOCOL_TIMEOUT * time.Second))
 	readLen, err := conn.Read(buf)
 	if err != nil || readLen != 32 {
 		println("Wrong length")
