@@ -285,6 +285,7 @@ func main() {
 	} else {
 		CONN_HOST = GetLocalIP()
 	}
+	time.Sleep(time.Duration(10) * time.Second)
 
 	// Makes sure we close iptables ports before forcefully quitting
 	c := make(chan os.Signal)
